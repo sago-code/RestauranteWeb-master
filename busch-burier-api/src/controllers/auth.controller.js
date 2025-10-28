@@ -22,18 +22,24 @@ export class AuthController {
     static async loginGoogle(req, res) {
         try {
             const { idToken } = req.body;
+            if (!idToken) {
+                return res.status(400).json({ error: "idToken es requerido" });
+            }
+
             const userData = await AuthService.loginWithGoogle(idToken);
 
-            // userData ya tiene { exists: true/false, session: ... }
-            return res.json({ 
-                exists: userData.exists, 
-                session: userData.session, 
-                token: idToken 
+            return res.json({
+                exists: userData.exists,
+                session: userData.session,
+                token: idToken
             });
 
         } catch (error) {
             console.error("Error en loginWithGoogle:", error);
-            res.status(500).json({ error: "Error en login con Google" });
+            const msg = error?.message || "Error en login con Google";
+            const isAuthError =
+                /token|auth|audience|issuer|project|credential|verifyIdToken/i.test(msg);
+            res.status(isAuthError ? 401 : 500).json({ error: msg });
         }
     }
 }
