@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { App } from "./app.js";
 
 async function main() {
