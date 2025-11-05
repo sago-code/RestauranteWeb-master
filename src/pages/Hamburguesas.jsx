@@ -1,10 +1,17 @@
-import React from 'react';
 import { useCart } from '../context/CartContext';
 import Breadcrumbs from './Breadcrumbs';
 
 function Hamburguesas() {
   const { addToCart } = useCart();
 
+  const handleAddToCart = async (hamburguesa) => {
+    try {
+      await addToCart(hamburguesa, 'hamburguesas');
+    } catch (err) {
+      console.error('Error al agregar producto:', err.response?.data || err.message);
+      alert('No se pudo agregar al carrito.');
+    }
+  };
   const hamburguesas = [
     {
       id: 'hamb1',
@@ -71,15 +78,6 @@ function Hamburguesas() {
       imagen: '/src/assets/hamburguesas/hamburguesa_triple_carne.jpg'
     }
   ];
-
-  const handleAddToCart = (hamburguesa) => {
-    addToCart({
-      id: hamburguesa.id,
-      nombre: hamburguesa.nombre,
-      precio: hamburguesa.precio,
-      cantidad: 1
-    });
-  };
 
   return (
     <div className="container mt-4 text-white">

@@ -1,9 +1,31 @@
 import React from 'react';
+import axios from 'axios';
+import { useCart } from '../context/CartContext';
 
 const CartModal = ({ isOpen, onClose, cartItems, onUpdateQuantity, onRemoveItem }) => {
   if (!isOpen) return null;
 
   const total = cartItems.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+  const { clearCart } = useCart();
+
+  const handleCheckout = async () => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('usuario') || sessionStorage.getItem('usuario') || 'null');
+      const userId = stored?.uid || null;
+      if (!userId) {
+        alert('Debes iniciar sesión para pagar');
+        return;
+      }
+
+      await axios.post(`${import.meta.env.VITE_API_URL}/carts/active/${userId}/pay`);
+      clearCart();
+      alert('¡Pedido creado correctamente!');
+      onClose && onClose();
+    } catch (err) {
+      console.error('Error al convertir carrito a pedido:', err);
+      alert('No se pudo crear el pedido');
+    }
+  };
 
   return (
     <div className="cart-modal-overlay" onClick={onClose}>
@@ -46,13 +68,28 @@ const CartModal = ({ isOpen, onClose, cartItems, onUpdateQuantity, onRemoveItem 
             <span>Total:</span>
             <span>${total.toLocaleString()}</span>
           </div>
-          <button className="checkout-button">
-            Realizar Pedido
+          <button
+            className="btn btn-outline-danger"
+            onClick={async () => {
+              await clearCart();
+              alert('Carrito vaciado');
+            }}
+            disabled={cartItems.length === 0}
+            style={{ marginRight: '8px' }}
+          >
+            Vaciar carrito
           </button>
+          {!(JSON.parse(localStorage.getItem('usuario') || sessionStorage.getItem('usuario') || 'null')?.uid) ? (
+            <a href="/login" className="checkout-button">Iniciar sesión para pedir</a>
+          ) : (
+            <button className="checkout-button" onClick={handleCheckout} disabled={cartItems.length === 0}>
+              Realizar Pedido
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 };
 
-export default CartModal; 
+export default CartModal;

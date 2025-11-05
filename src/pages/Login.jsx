@@ -59,25 +59,22 @@ function Login() {
     }
 
     try {
-      // Llamada al backend
-      const response = await axios.post(import.meta.env.VITE_API_URL + 'auth/login', {
-        email: correo,
-        password: clave,
-      });
+      const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+      const url = `${base}/auth/login`;
+      const { data, status } = await axios.post(url, { email: correo, password: clave });
 
-      const data = response.data;
-      if (data.user) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('usuario', JSON.stringify({ uid: data.uid, email: data.email }));
-        sessionStorage.setItem('token', data.token);
-        sessionStorage.setItem('usuario', JSON.stringify({ uid: data.uid, email: data.email }));
-
+      if (data?.user) {
+        localStorage.setItem('token', data.user.idToken);
+        sessionStorage.setItem('token', data.user.idToken);
+        localStorage.setItem('usuario', JSON.stringify({ uid: data.user.uid, email: data.user.email }));
+        sessionStorage.setItem('usuario', JSON.stringify({ uid: data.user.uid, email: data.user.email }));
+        console.log('[Login email] OK status:', status, 'uid:', data.user.uid);
         navigate('/');
       } else {
         setError(data.message || 'Credenciales inválidas');
       }
     } catch (err) {
-      console.error(err);
+      console.error('[Login email] error: status=', err.response?.status, 'data=', err.response?.data, 'msg=', err.message);
       setError('Error de conexión con el servidor');
     }
   };
@@ -90,35 +87,31 @@ function Login() {
   const handleGoogleLogin = async () => {
     setError('');
     try {
-      // 1️⃣ Iniciar sesión con Google (Frontend)
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
-      const idToken = await user.getIdToken(); // Obtener el token
+      const idToken = await user.getIdToken();
 
-      // 2️⃣ Enviar token al backend para validación
-      const response = await axios.post(import.meta.env.VITE_API_URL + 'auth/login-google', {
-        idToken, // Enviamos solo el token
-      });
-
-      const data = response.data;
+      const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+      const url = `${base}/auth/login-google`;
+      const { data, status } = await axios.post(url, { idToken });
 
       if (data.exists) {
-        // 3️⃣ Si el usuario EXISTE → Guardamos sesión y redirigimos
         sessionStorage.setItem('token', data.token);
         localStorage.setItem('token', data.token);
         sessionStorage.setItem('usuario', JSON.stringify(data.session));
         localStorage.setItem('usuario', JSON.stringify(data.session));
+        console.log('[Login Google] OK status:', status, 'uid:', data.session?.uid);
         navigate('/');
       } else {
         sessionStorage.setItem('token', data.token);
         localStorage.setItem('token', data.token);
         sessionStorage.setItem('usuario', JSON.stringify(data.session));
         localStorage.setItem('usuario', JSON.stringify(data.session));
+        console.log('[Login Google] usuario nuevo, redirigiendo a registro. status:', status);
         navigate('/register', { state: { userData: data.session, idToken: data.token } });
       }
-
     } catch (err) {
-      console.error(err);
+      console.error('[Login Google] error: status=', err.response?.status, 'data=', err.response?.data, 'msg=', err.message);
       setError('No se pudo iniciar sesión con Google');
     }
   };

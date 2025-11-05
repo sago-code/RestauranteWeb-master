@@ -100,8 +100,11 @@ function Register() {
           return;
         }
 
-        // Registrar usuario manual en backend
-        await axios.post(import.meta.env.VITE_API_URL + 'users', {
+        // Registrar usuario manual en backend (URL normalizada)
+        const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+        const url = `${base}/users`;
+        console.log('[Register manual] POST', url);
+        await axios.post(url, {
           email: formData.email,
           password: formData.password,
           firstName: formData.firstName,
@@ -134,7 +137,10 @@ function Register() {
         sessionStorage.setItem("usuario", JSON.stringify(userData));
       } else {
         // 🔹 Usuario de Google → solo guardar en la base de datos
-        await axios.post(import.meta.env.VITE_API_URL + 'users', {
+        const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+        const url = `${base}/users`;
+        console.log('[Register Google] POST', url);
+        await axios.post(url, {
           idToken: formData.idToken,
           email: formData.email,
           firstName: formData.firstName,

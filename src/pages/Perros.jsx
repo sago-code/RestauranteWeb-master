@@ -1,4 +1,3 @@
-import React from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import { useCart } from '../context/CartContext';
@@ -6,6 +5,15 @@ import Breadcrumbs from './Breadcrumbs';
 
 function Perros() {
   const { addToCart } = useCart();
+
+  const handleAddToCart = async (perro) => {
+    try {
+      await addToCart(perro, 'perros');
+    } catch (err) {
+      console.error('Error al agregar producto:', err.response?.data || err.message);
+      alert('No se pudo agregar al carrito.');
+    }
+  };
 
   const perros = [
     {
@@ -51,15 +59,6 @@ function Perros() {
       imagen: '/src/assets/perros/perro_completo.jpg'
     }
   ];
-
-  const handleAddToCart = (perro) => {
-    addToCart({
-      id: perro.id,
-      nombre: perro.nombre,
-      precio: perro.precio,
-      cantidad: 1
-    });
-  };
 
   return (
     <div className="container mt-4 text-white">
