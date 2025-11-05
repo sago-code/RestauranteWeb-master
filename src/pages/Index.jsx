@@ -1,7 +1,7 @@
 import React from 'react';
 import HeroSection from '../pages/HeroSection';
 import ContactForm from '../pages/ContactoForm';
-import CartModal from '../pages/CarModal';
+import CartModal from '../components/CartModal';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './Estilos.css';
 

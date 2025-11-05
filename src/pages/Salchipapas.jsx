@@ -1,4 +1,3 @@
-import React from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import { useCart } from '../context/CartContext';
@@ -6,6 +5,15 @@ import Breadcrumbs from './Breadcrumbs';
 
 function Salchipapas() {
   const { addToCart } = useCart();
+
+  const handleAddToCart = async (salchipapa) => {
+    try {
+      await addToCart(salchipapa, 'salchipapas');
+    } catch (err) {
+      console.error('Error al agregar producto:', err.response?.data || err.message);
+      alert('No se pudo agregar al carrito.');
+    }
+  };
 
   const salchipapas = [
     {
@@ -52,19 +60,9 @@ function Salchipapas() {
     }
   ];
 
-  const handleAddToCart = (salchipapa) => {
-    addToCart({
-      id: salchipapa.id,
-      nombre: salchipapa.nombre,
-      precio: salchipapa.precio,
-      cantidad: 1
-    });
-  };
-
   return (
     <div className="container mt-4 text-white">
       <Breadcrumbs items={[
-
         { label: 'Inicio', to: '/' },
         { label: 'Salchipapas' }
       ]} />

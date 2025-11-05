@@ -1,28 +1,113 @@
-import React from 'react';
+import axios from 'axios';
+import { useCart } from '../context/CartContext';
+import { Link } from 'react-router-dom';
+import * as cartApi from '../services/cartApi';
 
 function CartModal() {
-return (
+  const { cartItems, setCartItems, setActiveCartId, getTotalPrice } = useCart();
+  
+  const handleDecrease = async (item) => {
+    const { items, cartId } = await cartApi.updateQuantity(item.id, item.cantidad - 1);
+    setCartItems(items);
+    setActiveCartId(cartId);
+  };
+
+  const handleIncrease = async (item) => {
+    const { items, cartId } = await cartApi.updateQuantity(item.id, item.cantidad + 1);
+    setCartItems(items);
+    setActiveCartId(cartId);
+  };
+
+  const handleRemove = async (itemId) => {
+    const { items, cartId } = await cartApi.removeItem(itemId);
+    setCartItems(items);
+    setActiveCartId(cartId);
+  };
+
+  const total = getTotalPrice();
+
+  const handleCheckout = async () => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('usuario') || sessionStorage.getItem('usuario') || 'null');
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+      const userId = stored?.uid || null;
+      if (!userId) {
+        alert('Debes iniciar sesión para pagar');
+        return;
+      }
+
+      const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+      const url = `${base}/carts/active/${userId}/pay`;
+      console.log('[Checkout] POST', url);
+
+      const { status, data } = await axios.post(
+        url,
+        {},
+        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+      );
+      console.log('[Checkout] OK status:', status, 'data:', data);
+
+      clearCart();
+      alert('¡Pedido creado correctamente!');
+    } catch (err) {
+      console.error('Error al convertir carrito a pedido: status=', err.response?.status, 'data=', err.response?.data, 'msg=', err.message);
+      alert('No se pudo crear el pedido');
+    }
+  };
+
+  return (
     <div className="modal fade" id="cartModal" tabIndex="-1" aria-labelledby="cartModalLabel" aria-hidden="true">
-    <div className="modal-dialog">
+      <div className="modal-dialog">
         <div className="modal-content">
-        <div className="modal-header">
+          <div className="modal-header">
             <h5 className="modal-title" id="cartModalLabel">Carrito de Compras</h5>
             <button type="button" className="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-        </div>
-        <div className="modal-body">
-            <ul id="cart-items" className="list-group mb-3">
-              {/* Aquí irán los productos añadidos al carrito */}
-            </ul>
-            <p>Total: <span id="cart-total">$0</span></p>
-        </div>
-        <div className="modal-footer">
+          </div>
+          <div className="modal-body">
+            {cartItems.length === 0 ? (
+              <p>El carrito está vacío</p>
+            ) : (
+              <ul className="list-group mb-3">
+                {cartItems.map(item => (
+                  <li key={item.id} className="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                      <strong>{item.nombre}</strong>
+                      <div className="text-muted">${item.precio.toLocaleString()}</div>
+                    </div>
+                    <div className="d-flex align-items-center gap-2">
+                      <button className="btn btn-sm btn-outline-secondary" onClick={() => handleDecrease(item)}>-</button>
+                      <span>{item.cantidad}</span>
+                      <button className="btn btn-sm btn-outline-secondary" onClick={() => handleIncrease(item)}>+</button>
+                      <button className="btn btn-sm btn-outline-danger" onClick={() => handleRemove(item.id)}>
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p>Total: <span id="cart-total">${total.toLocaleString()}</span></p>
+          </div>
+          <div className="modal-footer">
             <button type="button" className="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-            <button type="button" className="btn btn-primary">Pagar</button>
+            <button type="button" className="btn btn-outline-danger" onClick={handleClear} disabled={cartItems.length === 0}>
+              Vaciar carrito
+            </button>
+            {/* Si no hay usuario, invitar a iniciar sesión para pedir */}
+            {!(JSON.parse(localStorage.getItem('usuario') || sessionStorage.getItem('usuario') || 'null')?.uid) ? (
+              <Link to="/login" className="btn btn-primary">
+                Iniciar sesión para pedir
+              </Link>
+            ) : (
+              <button type="button" className="btn btn-primary" onClick={handleCheckout} disabled={cartItems.length === 0}>
+                Pagar
+              </button>
+            )}
+          </div>
         </div>
-        </div>
+      </div>
     </div>
-    </div>
-);
+  );
 }
 
 export default CartModal;
