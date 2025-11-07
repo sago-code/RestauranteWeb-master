@@ -37,8 +37,16 @@ async function fetchCurrentCart() {
   const { userId, token } = auth();
   const b = base();
   if (userId) {
-    const { data } = await axios.get(`${b}/carts/active/${userId}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
-    return { cartId: data.cart?.id || null, items: data.cart?.items || [] };
+    try {
+      const { data } = await axios.get(`${b}/carts/active/${userId}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+      return { cartId: data.cart?.id || null, items: data.cart?.items || [] };
+    } catch (err) {
+      // Si no hay carrito activo, devolver vacío para permitir PUT /carts/active
+      if (err.response?.status === 404) {
+        return { cartId: null, items: [] };
+      }
+      throw err;
+    }
   }
   const guestId = sanitizeGuestId();
   if (guestId) {
@@ -55,6 +63,8 @@ async function fetchCurrentCart() {
   }
   return { cartId: null, items: [] };
 }
+
+// Dentro de cartApi.js
 
 function addOne(existingServerItems, product, type) {
   const items = [...existingServerItems];
@@ -75,40 +85,124 @@ function addOne(existingServerItems, product, type) {
   return items;
 }
 
+// Fusiona listas de items (pueden venir en forma servidor o normalizada) sumando cantidades por productId
+function mergeItems(listA = [], listB = []) {
+  const map = new Map();
+  const ingest = (arr) => {
+    arr.forEach(it => {
+      const pid = it.productId ?? it.id;
+      const qty = it.quantity ?? it.cantidad ?? 0;
+      if (!pid) return;
+      const prev = map.get(pid);
+      if (prev) {
+        const baseQty = prev.quantity ?? prev.cantidad ?? 0;
+        map.set(pid, { ...prev, quantity: baseQty + qty, productId: pid });
+      } else {
+        // normalizar a forma de servidor
+        map.set(pid, {
+          productId: pid,
+          name: it.name ?? it.nombre,
+          image: it.image ?? it.imagen,
+          quantity: qty,
+          unitPrice: it.unitPrice ?? it.precio,
+          currency: it.currency ?? 'COP',
+          type: it.type
+        });
+      }
+    });
+  };
+  ingest(listA);
+  ingest(listB);
+  return Array.from(map.values());
+}
+
 export async function addItem(product, type) {
   const { userId, token } = auth();
   const b = base();
   const current = await fetchCurrentCart();
-  const nextServerItems = addOne(current.items, product, type);
 
-  if (userId) {
-    await axios.put(`${b}/carts/active`, { userId, items: toServerItems(nextServerItems) }, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
-    const { data } = await axios.get(`${b}/carts/active/${userId}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
-    return { cartId: data.cart?.id || null, items: normalizeFromServer(data.cart?.items) };
+  // Si el usuario está logueado y existe carrito invitado, fusionar ambos antes de agregar
+  const guestId = sanitizeGuestId();
+  let nextServerItems;
+
+  if (userId && guestId) {
+    // Leer carrito invitado
+    let guestItems = [];
+    try {
+      const { data } = await axios.get(`${b}/carts/${guestId}`);
+      guestItems = data.cart?.items || data.items || [];
+    } catch (err) {
+      // Si 404, no hay carrito invitado real; seguimos sin él
+      if (err.response?.status !== 404) throw err;
+    }
+
+    // Fusionar activo (si existe) + invitado, luego agregar el nuevo producto
+    const combined = mergeItems(current.items, guestItems);
+    nextServerItems = addOne(combined, product, type);
+
+    // Sincronizar carrito activo del usuario con todos los items
+    const headers = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
+    const putRes = await axios.put(`${b}/carts/active`, { userId, items: toServerItems(nextServerItems) }, headers);
+
+    // Eliminar carrito invitado para evitar duplicidades
+    try {
+      await axios.delete(`${b}/carts/${guestId}`);
+    } catch (err) {
+      // Ignorar 404 en borrado de invitado
+      if (err.response?.status !== 404) console.warn('[GuestCart] delete falló:', err.response?.data || err.message);
+    }
+    localStorage.removeItem('guestCartId');
+
+    // Intentar re-leer estado final del activo; si 404, devolver fallback consistente
+    try {
+      const { data } = await axios.get(`${b}/carts/active/${userId}`, headers);
+      return { cartId: data.cart?.id || putRes.data.cartId || null, items: normalizeFromServer(data.cart?.items) };
+    } catch (err) {
+      if (err.response?.status === 404) {
+        return { cartId: putRes.data.cartId || null, items: normalizeFromServer(nextServerItems) };
+      }
+      throw err;
+    }
   }
 
-  let guestId = sanitizeGuestId();
-  if (!guestId) {
+  // Flujo original (sin guestId o usuario no logueado)
+  const baseItems = current.items;
+  nextServerItems = addOne(baseItems, product, type);
+
+  if (userId) {
+    const putRes = await axios.put(`${b}/carts/active`, { userId, items: toServerItems(nextServerItems) }, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+    try {
+      const { data } = await axios.get(`${b}/carts/active/${userId}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+      return { cartId: data.cart?.id || putRes.data.cartId || null, items: normalizeFromServer(data.cart?.items) };
+    } catch (err) {
+      if (err.response?.status === 404) {
+        return { cartId: putRes.data.cartId || null, items: normalizeFromServer(nextServerItems) };
+      }
+      throw err;
+    }
+  }
+
+  let guest = sanitizeGuestId();
+  if (!guest) {
     const { data } = await axios.post(`${b}/carts`, { items: toServerItems(nextServerItems), status: 'active' });
     const newId = data?.cartId || data?.id || null;
     if (newId) {
       localStorage.setItem('guestCartId', newId);
-      guestId = newId;
+      guest = newId;
     } else {
       return { cartId: null, items: [] };
     }
   } else {
     try {
-      await axios.put(`${b}/carts/${guestId}`, { items: toServerItems(nextServerItems) });
+      await axios.put(`${b}/carts/${guest}`, { items: toServerItems(nextServerItems) });
     } catch (err) {
       if (err.response?.status === 404) {
-        // El carrito fue borrado en backend: crear uno nuevo
         localStorage.removeItem('guestCartId');
         const { data } = await axios.post(`${b}/carts`, { items: toServerItems(nextServerItems), status: 'active' });
         const newId = data?.cartId || data?.id || null;
         if (newId) {
           localStorage.setItem('guestCartId', newId);
-          guestId = newId;
+          guest = newId;
         } else {
           return { cartId: null, items: [] };
         }
@@ -117,11 +211,10 @@ export async function addItem(product, type) {
       }
     }
   }
-  // Releer y confirmar ID válido antes del GET
   const safeId = sanitizeGuestId();
   if (!safeId) return { cartId: null, items: [] };
-  const { data } = await axios.get(`${b}/carts/${safeId}`);
-  return { cartId: safeId, items: normalizeFromServer(data.cart?.items || data.items) };
+  const got = await axios.get(`${b}/carts/${safeId}`);
+  return { cartId: safeId, items: normalizeFromServer(got.data.cart?.items || got.data.items) };
 }
 
 export async function updateQuantity(itemId, newQty) {
@@ -144,9 +237,16 @@ export async function updateQuantity(itemId, newQty) {
       await axios.delete(`${b}/carts/active/${userId}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
       return { cartId: null, items: [] };
     }
-    await axios.put(`${b}/carts/active`, { userId, items: toServerItems(nextServerItems) }, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
-    const { data } = await axios.get(`${b}/carts/active/${userId}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
-    return { cartId: data.cart?.id || null, items: normalizeFromServer(data.cart?.items) };
+    const putRes = await axios.put(`${b}/carts/active`, { userId, items: toServerItems(nextServerItems) }, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+    try {
+      const { data } = await axios.get(`${b}/carts/active/${userId}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+      return { cartId: data.cart?.id || putRes.data.cartId || null, items: normalizeFromServer(data.cart?.items) };
+    } catch (err) {
+      if (err.response?.status === 404) {
+        return { cartId: putRes.data.cartId || null, items: normalizeFromServer(nextServerItems) };
+      }
+      throw err;
+    }
   }
 
   let guestId = sanitizeGuestId();
