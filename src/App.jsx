@@ -13,6 +13,7 @@ import Footer from './pages/Footer';
 import MenuSection from './pages/MenuSection';
 import { CartProvider } from './context/CartContext';
 import WhatsAppButton from './components/WhatsAppButton';
+import ChatBot from './components/ChatBot.jsx';
 
 // Layout principal que incluye la barra de navegación, el pie de página y el botón de WhatsApp
 const MainLayout = ({ children }) => {
@@ -22,6 +23,7 @@ const MainLayout = ({ children }) => {
       {children}
       <Footer />
       <WhatsAppButton />
+       <ChatBot />
     </>
   );
 };
@@ -33,6 +35,7 @@ const AuthLayout = ({ children }) => {
       <Navbar />
       {children}
       <Footer />
+      <ChatBot />
     </>
   );
 };
