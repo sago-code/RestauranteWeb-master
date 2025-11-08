@@ -5,6 +5,7 @@ import cors from "cors";
 import authRoutes from "./src/routes/auth.routes.js";
 import userRoutes from "./src/routes/user.routes.js";
 import cartRoutes from "./src/routes/cart.routes.js";
+import chatRoutes from "./src/routes/chat.routes.js";
 
 export class App {
     constructor(port) {
@@ -30,6 +31,7 @@ export class App {
         this.app.use("/auth", authRoutes);
         this.app.use("/users", userRoutes);
         this.app.use("/carts", cartRoutes);
+        this.app.use("/chat", chatRoutes);
     }
 
     async listen() {
