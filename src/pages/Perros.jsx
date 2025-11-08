@@ -46,7 +46,7 @@ function Perros() {
     },
     {
       id: 'per5',
-      nombre: 'Perro Italiano',
+      nombre: 'Perro Italiano', 
       descripcion: 'Pan suave, salchicha premium, salsa de tomate, queso mozzarella y albahaca.',
       precio: 14000,
       imagen: '/src/assets/perros/perro_italiano.jpeg'
