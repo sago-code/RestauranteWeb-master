@@ -1,28 +1,36 @@
-import React from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
 import { useCart } from '../context/CartContext';
+import OrderModal from './OrderModal';
 
 const CartModal = ({ isOpen, onClose, cartItems, onUpdateQuantity, onRemoveItem }) => {
   if (!isOpen) return null;
 
   const total = cartItems.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
   const { clearCart } = useCart();
+  const [orderOpen, setOrderOpen] = useState(false);
 
-  const handleCheckout = async () => {
+  const handlePay = async (provider) => {
     try {
       const stored = JSON.parse(localStorage.getItem('usuario') || sessionStorage.getItem('usuario') || 'null');
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
       const userId = stored?.uid || null;
       if (!userId) {
         alert('Debes iniciar sesión para pagar');
         return;
       }
 
-      await axios.post(`${import.meta.env.VITE_API_URL}/carts/active/${userId}/pay`);
-      clearCart();
+      const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+      const url = `${base}/carts/active/${userId}/pay`;
+      console.log(`[Checkout:${provider}] POST`, url);
+
+      await axios.post(url, {}, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+      await clearCart();
       alert('¡Pedido creado correctamente!');
+      setOrderOpen(false);
       onClose && onClose();
     } catch (err) {
-      console.error('Error al convertir carrito a pedido:', err);
+      console.error('Error al convertir carrito a pedido:', err.response?.data || err.message);
       alert('No se pudo crear el pedido');
     }
   };
@@ -82,14 +90,22 @@ const CartModal = ({ isOpen, onClose, cartItems, onUpdateQuantity, onRemoveItem 
           {!(JSON.parse(localStorage.getItem('usuario') || sessionStorage.getItem('usuario') || 'null')?.uid) ? (
             <a href="/login" className="checkout-button">Iniciar sesión para pedir</a>
           ) : (
-            <button className="checkout-button" onClick={handleCheckout} disabled={cartItems.length === 0}>
-              Realizar Pedido
+            <button className="checkout-button" onClick={() => setOrderOpen(true)} disabled={cartItems.length === 0}>
+              Ver orden y pagar
             </button>
           )}
         </div>
+
+        <OrderModal
+          isOpen={orderOpen}
+          onClose={() => setOrderOpen(false)}
+          items={cartItems}
+          onPayPaypal={() => handlePay('paypal')}
+          onPayPayU={() => handlePay('payu')}
+        />
       </div>
     </div>
   );
-};
+}
 
 export default CartModal;

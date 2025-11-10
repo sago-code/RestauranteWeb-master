@@ -51,9 +51,20 @@ export const CartProvider = ({ children }) => {
         if (userId) {
           const url = `${base}/carts/active/${userId}`;
           console.log('[Hydrate] GET', url);
-          const { data } = await axios.get(url);
-          setCartItems(normalizeFromServer(data.cart?.items));
-          setActiveCartId(data.cart?.id || null);
+          try {
+            const { data } = await axios.get(url);
+            setCartItems(normalizeFromServer(data.cart?.items));
+            setActiveCartId(data.cart?.id || null);
+          } catch (err) {
+            // Si 404: no hay carrito activo, estado vacío pero consistente
+            if (err.response?.status === 404) {
+              console.warn('[Hydrate] no hay carrito activo para userId, dejo vacío');
+              setCartItems([]);
+              setActiveCartId(null);
+            } else {
+              throw err;
+            }
+          }
           return;
         }
         // Usa SIEMPRE el helper saneado
@@ -71,6 +82,9 @@ export const CartProvider = ({ children }) => {
         setActiveCartId(null);
       } catch (err) {
         console.error('Error hidratando carrito:', err.response?.data || err.message);
+        // Garantiza estado consistente aun con errores
+        setCartItems([]);
+        setActiveCartId(null);
       }
     };
     hydrate();
