@@ -69,7 +69,7 @@ const ChatBot = () => {
       {open && (
         <div
           style={{
-            position: 'fixed', right: 20, bottom: 200, zIndex: 9998,
+            position: 'fixed', right: 20, bottom: 92, zIndex: 9998,
             width: 340, height: 440, background: '#fff', borderRadius: 16,
             boxShadow: '0 12px 28px rgba(0,0,0,.25)', display: 'flex', flexDirection: 'column',
             overflow: 'hidden', border: '1px solid #eee',
