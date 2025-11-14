@@ -5,22 +5,25 @@ import '@fortawesome/fontawesome-free/css/all.min.css';
 import axios from 'axios';
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import Breadcrumbs from './Breadcrumbs';
+import { useAuth } from '../context/AuthContext.jsx';
 
 function Register() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { login } = useAuth();
   const googleUserData = location.state?.userData || {};
   const idToken = location.state?.idToken || '';
   console.log("ID Token recibido de Google:", idToken);
   console.log("Datos recibidos de Google:", googleUserData);
 
+  const googlePhoto = (googleUserData.photo || (getAuth().currentUser?.photoURL || ''));
   const [formData, setFormData] = useState({
     firstName: googleUserData.firstName || '',
     lastName: googleUserData.lastName || '',
     email: googleUserData.email || '',
     password: '',
     confirmPassword: '',
-    photo: googleUserData.photo || '',
+    photo: googlePhoto || '',
     address: '',
     phone: '',
     idToken: idToken || ''
@@ -30,7 +33,7 @@ function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isFormDirty, setIsFormDirty] = useState(false);
-  const [preview, setPreview] = useState(formData.photo || "");
+  const [preview, setPreview] = useState(googlePhoto || "");
 
   useEffect(() => {
     const isDirty = Object.values(formData).some((field) => field !== '');
@@ -135,12 +138,13 @@ function Register() {
         sessionStorage.setItem("token", token);
         localStorage.setItem("usuario", JSON.stringify(userData));
         sessionStorage.setItem("usuario", JSON.stringify(userData));
+        login?.(userData); // ACTIVAR contexto
       } else {
-        // 🔹 Usuario de Google → solo guardar en la base de datos
+        // 🔹 Usuario de Google → crear en BD y activar sesión
         const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
         const url = `${base}/users`;
         console.log('[Register Google] POST', url);
-        await axios.post(url, {
+        const { data } = await axios.post(url, {
           idToken: formData.idToken,
           email: formData.email,
           firstName: formData.firstName,
@@ -149,9 +153,16 @@ function Register() {
           address: formData.address || "",
           phone: formData.phone || "",
         });
+
+        const sessionUser = data?.user;
+        // Guardar sesión local con el mismo idToken
+        localStorage.setItem('token', formData.idToken);
+        sessionStorage.setItem('token', formData.idToken);
+        localStorage.setItem('usuario', JSON.stringify(sessionUser));
+        sessionStorage.setItem('usuario', JSON.stringify(sessionUser));
+        login?.(sessionUser); // ACTIVAR contexto
       }
 
-      // Redirigir al home
       navigate("/");
     } catch (err) {
       console.error(err);
@@ -181,6 +192,7 @@ function Register() {
                 width="120"
                 height="120"
                 style={{ objectFit: 'cover', border: '3px solid #ccc' }}
+                onError={(e) => { e.currentTarget.src = "https://static.vecteezy.com/system/resources/previews/007/407/996/non_2x/user-icon-person-icon-client-symbol-login-head-sign-icon-design-vector.jpg"; }}
               />
             </label>
             <input

@@ -19,6 +19,8 @@ export class UserController {
             firstName,
             lastName,
             photo,
+            address: req.body?.address,
+            phone: req.body?.phone
         });
 
         return res.status(201).json({
@@ -27,10 +29,39 @@ export class UserController {
         });
         } catch (error) {
             console.error("❌ Error en createUser:", error);
-            return res.status(500).json({
-                message: "Error interno del servidor",
+            const status = error?.code === "PHONE_DUPLICATE" ? 409 : 500;
+            return res.status(status).json({
                 error: error.message,
             });
+        }
+    }
+
+    // Nuevo: GET /users/:uid
+    static async getOne(req, res) {
+        try {
+            const { uid } = req.params;
+            const user = await UserService.getUser(uid);
+            if (!user) {
+                return res.status(404).json({ error: "Usuario no encontrado" });
+            }
+            return res.status(200).json({ user });
+        } catch (error) {
+            console.error("❌ Error obteniendo usuario:", error);
+            return res.status(400).json({ error: error.message });
+        }
+    }
+
+    // Nuevo: PUT /users/:uid
+    static async update(req, res) {
+        try {
+            const { uid } = req.params;
+            const { firstName, lastName, address, phone, photo } = req.body || {};
+            const user = await UserService.updateUser(uid, { firstName, lastName, address, phone, photo });
+            return res.status(200).json({ message: "Usuario actualizado", user });
+        } catch (error) {
+            console.error("❌ Error actualizando usuario:", error);
+            const status = error?.code === "PHONE_DUPLICATE" ? 409 : 400;
+            return res.status(status).json({ error: error.message });
         }
     }
 }

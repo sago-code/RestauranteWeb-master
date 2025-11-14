@@ -1,8 +1,11 @@
 import { useCart } from '../context/CartContext';
 import Breadcrumbs from './Breadcrumbs';
+import { useState } from 'react';
+import ProductDetail from '../components/ProductDetail.jsx';
 
 function Hamburguesas() {
   const { addToCart } = useCart();
+  const [selected, setSelected] = useState(null);
 
   const handleAddToCart = async (hamburguesa) => {
     try {
@@ -12,6 +15,7 @@ function Hamburguesas() {
       alert('No se pudo agregar al carrito.');
     }
   };
+  
   const hamburguesas = [
     {
       id: 'hamb1',
@@ -19,7 +23,6 @@ function Hamburguesas() {
       descripcion: 'Pan artesanal, carne de res 200g, lechuga, tomate, cebolla y queso cheddar.',
       precio: 15000,
       imagen: './src/assets/hamburguesas/hamburguesa_clasica.jpg'
-      
     },
     {
       id: 'hamb2',
@@ -82,7 +85,6 @@ function Hamburguesas() {
   return (
     <div className="container mt-4 text-white">
       <Breadcrumbs items={[
-
         { label: 'Inicio', to: '/' },
         { label: 'Hamburguesas' }
       ]} />
@@ -90,7 +92,14 @@ function Hamburguesas() {
       <div className="row">
         {hamburguesas.map((hamburguesa) => (
           <div className="col-md-4 mb-4" key={hamburguesa.id}>
-            <div className="card bg-dark text-white h-100">
+            <div
+              className="card bg-dark text-white h-100"
+              onClick={() => setSelected(hamburguesa)}
+              role="button"
+              tabIndex="0"
+              onKeyDown={(e) => e.key === 'Enter' && setSelected(hamburguesa)}
+              style={{ cursor: 'pointer' }}
+            >
               <img 
                 src={hamburguesa.imagen} 
                 className="card-img-top" 
@@ -103,15 +112,23 @@ function Hamburguesas() {
                 <p className="price">${hamburguesa.precio.toLocaleString()}</p>
                 <button 
                   className="btn btn-primary"
-                  onClick={() => handleAddToCart(hamburguesa)}
+                  onClick={(e) => { e.stopPropagation(); handleAddToCart(hamburguesa); }}
                 >
                   Agregar al Carrito
                 </button>
+                {/* Se elimina el botón "Ver detalles" */}
               </div>
             </div>
           </div>
         ))}
       </div>
+      {/* Modal de detalles */}
+      <ProductDetail
+        product={selected}
+        isOpen={!!selected}
+        onClose={() => setSelected(null)}
+        onAdd={(p) => { handleAddToCart(p); setSelected(null); }}
+      />
     </div>
   );
 }

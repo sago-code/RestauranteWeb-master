@@ -8,17 +8,45 @@ import OrderModal from '../components/OrderModal.jsx';
 function CartModal() {
   const { cartItems, setCartItems, setActiveCartId, getTotalPrice, clearCart } = useCart();
   const [orderOpen, setOrderOpen] = useState(false);
+  const [draftQty, setDraftQty] = useState({});
 
   const handleDecrease = async (item) => {
+    setDraftQty(prev => {
+      const { [item.id]: _, ...rest } = prev;
+      return rest;
+    });
     const { items, cartId } = await cartApi.updateQuantity(item.id, item.cantidad - 1);
     setCartItems(items);
     setActiveCartId(cartId);
   };
 
   const handleIncrease = async (item) => {
+    setDraftQty(prev => {
+      const { [item.id]: _, ...rest } = prev;
+      return rest;
+    });
     const { items, cartId } = await cartApi.updateQuantity(item.id, item.cantidad + 1);
     setCartItems(items);
     setActiveCartId(cartId);
+  };
+
+  const handleSetQuantity = async (item, rawValue) => {
+    const v = String(rawValue).trim();
+    if (v === '') {
+      setDraftQty(prev => {
+        const { [item.id]: _, ...rest } = prev;
+        return rest;
+      });
+      return;
+    }
+    const qty = Math.max(1, parseInt(v, 10));
+    const { items, cartId } = await cartApi.updateQuantity(item.id, qty);
+    setCartItems(items);
+    setActiveCartId(cartId);
+    setDraftQty(prev => {
+      const { [item.id]: _, ...rest } = prev;
+      return rest;
+    });
   };
 
   const handleRemove = async (itemId) => {
@@ -76,22 +104,42 @@ function CartModal() {
                 <p>El carrito está vacío</p>
               ) : (
                 <ul className="list-group mb-3">
-                  {cartItems.map(item => (
-                    <li key={item.id} className="list-group-item d-flex justify-content-between align-items-center">
-                      <div>
-                        <strong>{item.nombre}</strong>
-                        <div className="text-muted">${item.precio.toLocaleString()}</div>
-                      </div>
-                      <div className="d-flex align-items-center gap-2">
-                        <button className="btn btn-sm btn-outline-secondary" onClick={() => handleDecrease(item)}>-</button>
-                        <span>{item.cantidad}</span>
-                        <button className="btn btn-sm btn-outline-secondary" onClick={() => handleIncrease(item)}>+</button>
-                        <button className="btn btn-sm btn-outline-danger" onClick={() => handleRemove(item.id)}>
-                          <i className="fas fa-trash"></i>
-                        </button>
-                      </div>
-                    </li>
-                  ))}
+                  {cartItems.map(item => {
+                    const inputValue = draftQty[item.id] !== undefined ? draftQty[item.id] : String(item.cantidad);
+                    return (
+                      <li key={item.id} className="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                          <strong>{item.nombre}</strong>
+                          <div className="text-muted">${item.precio.toLocaleString()}</div>
+                        </div>
+                        <div className="d-flex align-items-center gap-2">
+                          <button className="btn btn-sm btn-outline-secondary" onClick={() => handleDecrease(item)}>-</button>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={inputValue}
+                            onChange={(e) => {
+                              const digits = e.target.value.replace(/[^\d]/g, '');
+                              setDraftQty(prev => ({ ...prev, [item.id]: digits }));
+                            }}
+                            onBlur={() => handleSetQuantity(item, draftQty[item.id] ?? '')}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleSetQuantity(item, draftQty[item.id] ?? '');
+                              }
+                            }}
+                            style={{ width: '64px', textAlign: 'center' }}
+                            aria-label={`Cantidad de ${item.nombre}`}
+                          />
+                          <button className="btn btn-sm btn-outline-secondary" onClick={() => handleIncrease(item)}>+</button>
+                          <button className="btn btn-sm btn-outline-danger" onClick={() => handleRemove(item.id)}>
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               <p>Total: <span id="cart-total">${total.toLocaleString()}</span></p>

@@ -1,4 +1,4 @@
-import express from "express";
+import express from 'express';
 import chalk from "chalk";
 import morgan from "morgan";
 import cors from "cors";
@@ -6,6 +6,8 @@ import authRoutes from "./src/routes/auth.routes.js";
 import userRoutes from "./src/routes/user.routes.js";
 import cartRoutes from "./src/routes/cart.routes.js";
 import chatRoutes from "./src/routes/chat.routes.js";
+import orderRoutes from "./src/routes/order.routes.js";
+import payuRoutes from "./src/routes/payu.routes.js";
 
 export class App {
     constructor(port) {
@@ -24,6 +26,7 @@ export class App {
     middlewares() {
         this.app.use(morgan("dev"));
         this.app.use(express.json());
+        this.app.use(express.urlencoded({ extended: true })); // acepta confirmaciones de PayU
         this.app.use(cors());
     }
 
@@ -32,6 +35,9 @@ export class App {
         this.app.use("/users", userRoutes);
         this.app.use("/carts", cartRoutes);
         this.app.use("/chat", chatRoutes);
+        this.app.use("/orders", orderRoutes); // nuevo
+        // Montar ruta de PayU (ESM y dentro de la clase)
+        this.app.use("/payu", payuRoutes);
     }
 
     async listen() {

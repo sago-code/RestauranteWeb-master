@@ -43,8 +43,21 @@ export class UserService {
             }
         }
 
+        const phoneVal = (phone || '').trim();
+        if (phoneVal) {
+            const snap = await db.collection("users").where("phone", "==", phoneVal).limit(1).get();
+            if (!snap.empty) {
+                const existing = snap.docs[0];
+                if (existing.id !== uid) {
+                    const err = new Error("El teléfono ya está registrado");
+                    err.code = "PHONE_DUPLICATE";
+                    throw err;
+                }
+            }
+        }
+
         // 🔹 Normalizar datos: convertir undefined → null
-        const normalize = (val) => (val === undefined ? null : val);
+        const normalize = (val) => (val === undefined ? null : (typeof val === 'string' ? val.trim() || null : val));
 
         const user = new UserModel({
             uid,
@@ -53,7 +66,7 @@ export class UserService {
             lastName: normalize(lastName),
             photo: normalize(photo || userRecord.photoURL),
             address: normalize(address),
-            phone: normalize(phone),
+            phone: normalize(phoneVal),
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
@@ -62,5 +75,45 @@ export class UserService {
 
     const savedDoc = await db.collection("users").doc(uid).get();
         return UserModel.fromFirestore(savedDoc);
+    }
+
+    // Nuevo: obtener usuario por uid
+    static async getUser(uid) {
+        const db = admin.firestore();
+        if (!uid) throw new Error("uid es requerido");
+        const doc = await db.collection("users").doc(uid).get();
+        if (!doc.exists) return null;
+        return UserModel.fromFirestore(doc);
+    }
+
+    // Nuevo: actualizar perfil de usuario
+    static async updateUser(uid, { firstName, lastName, address, phone, photo }) {
+        const db = admin.firestore();
+        if (!uid) throw new Error("uid es requerido");
+        const normalize = (v) => (v === undefined ? null : (typeof v === 'string' ? v.trim() || null : v));
+
+        // 🔹 Validar unicidad del teléfono (si viene un valor no vacío)
+        const phoneVal = normalize(phone);
+        if (phoneVal) {
+            const snap = await db.collection("users").where("phone", "==", phoneVal).limit(1).get();
+            if (!snap.empty && snap.docs[0].id !== uid) {
+                const err = new Error("El teléfono ya está registrado");
+                err.code = "PHONE_DUPLICATE";
+                throw err;
+            }
+        }
+
+        const data = {
+            firstName: normalize(firstName),
+            lastName: normalize(lastName),
+            address: normalize(address),
+            phone: phoneVal,
+            photo: normalize(photo),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+
+        await db.collection("users").doc(uid).set(data, { merge: true });
+        const saved = await db.collection("users").doc(uid).get();
+        return UserModel.fromFirestore(saved);
     }
 }

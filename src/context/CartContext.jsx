@@ -17,19 +17,12 @@ export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState([]);
   const [activeCartId, setActiveCartId] = useState(null);
   const { usuario } = useAuth();
+  const [hydrated, setHydrated] = useState(false);
 
   const getUserId = () => {
     const stored = JSON.parse(localStorage.getItem('usuario') || sessionStorage.getItem('usuario') || 'null');
     return stored?.uid || null;
   };
-
-  const normalizeFromServer = (items) => (items || []).map(i => ({
-    id: i.productId,
-    nombre: i.name,
-    imagen: i.image || undefined,
-    cantidad: i.quantity,
-    precio: i.unitPrice
-  }));
 
   // Sanear guestCartId en localStorage
   const getGuestCartId = () => {
@@ -41,74 +34,46 @@ export const CartProvider = ({ children }) => {
     return id;
   };
 
-  // Hidratar en montaje (trae carrito desde Firestore si hay userId o guestCartId)
-  // Dentro de CartProvider -> useEffect de hidratación (montaje)
+  const normalizeFromServer = (items) => (items || []).map(i => ({
+    id: i.productId,
+    nombre: i.name,
+    imagen: i.image || undefined,
+    cantidad: i.quantity,
+    precio: i.unitPrice
+  }));
+
+  // Hidratar primero y recién ahí permitir sincronizaciones
   useEffect(() => {
-    const hydrate = async () => {
+    const run = async () => {
       try {
-        const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
-        const userId = getUserId();
-        if (userId) {
-          const url = `${base}/carts/active/${userId}`;
-          console.log('[Hydrate] GET', url);
-          try {
-            const { data } = await axios.get(url);
-            setCartItems(normalizeFromServer(data.cart?.items));
-            setActiveCartId(data.cart?.id || null);
-          } catch (err) {
-            // Si 404: no hay carrito activo, estado vacío pero consistente
-            if (err.response?.status === 404) {
-              console.warn('[Hydrate] no hay carrito activo para userId, dejo vacío');
-              setCartItems([]);
-              setActiveCartId(null);
-            } else {
-              throw err;
-            }
-          }
-          return;
-        }
-        // Usa SIEMPRE el helper saneado
-        const guestCartId = getGuestCartId(); // ← cambio crítico
-        if (guestCartId) {
-          const url = `${base}/carts/${guestCartId}`;
-          console.log('[Hydrate guest] GET', url);
-          const { data } = await axios.get(url);
-          setCartItems(normalizeFromServer(data.cart?.items || data.items));
-          setActiveCartId(guestCartId);
-          return;
-        }
-        console.log('[Hydrate] no userId ni guestCartId: carrito vacío');
-        setCartItems([]);
-        setActiveCartId(null);
+        const { cartId, items } = await cartApi.hydrate();
+        setCartItems(items);
+        setActiveCartId(cartId);
       } catch (err) {
-        console.error('Error hidratando carrito:', err.response?.data || err.message);
-        // Garantiza estado consistente aun con errores
-        setCartItems([]);
-        setActiveCartId(null);
+        console.error('Error hydrate:', err.response?.data || err.message);
+      } finally {
+        setHydrated(true);
       }
     };
-    hydrate();
+    run();
   }, []);
 
-  // Elimina la sincronización automática por efecto; ahora las acciones son backend-first
+  // Elimina la sincronización destructiva en vacío y espera a que haya hidratación
   useEffect(() => {
     const userId = getUserId();
-    if (!userId) {
-      console.log('[Sync] skip: no userId (usuario no logueado)');
+    if (!userId || !hydrated) {
       return;
     }
 
     const sync = async () => {
       try {
-        const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+        // No borrar el carrito si cartItems === 0 durante/tras la hidratación
         if (cartItems.length === 0) {
-          const delUrl = `${base}/carts/active/${userId}`;
-          console.log('[Sync] DELETE', delUrl, '(declinar porque carrito vacío)');
-          await axios.delete(delUrl);
-          setActiveCartId(null);
+          // Deja que las acciones explícitas (clearCart, removeItem) manejen el borrado
           return;
         }
 
+        const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
         const pathname = window.location.pathname;
         const type =
           pathname.includes('hamburguesas') ? 'hamburguesas' :
@@ -136,14 +101,15 @@ export const CartProvider = ({ children }) => {
     };
 
     sync();
-  }, [cartItems]);
+  }, [cartItems, hydrated]);
 
-  // Migrar carrito del invitado al backend cuando el usuario inicia sesión
+  // Migrar carrito del invitado tras login (espera hidratación)
   useEffect(() => {
     const migrate = async () => {
-      if (!usuario?.uid) return;
+      if (!usuario?.uid || !hydrated) return;
       const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
-      const guestCartId = getGuestCartId(); // ← cambio crítico
+      const guestCartId = getGuestCartId();
+
       try {
         if (guestCartId) {
           const urlAttach = `${base}/carts/${guestCartId}/attach/${usuario.uid}`;
@@ -156,10 +122,10 @@ export const CartProvider = ({ children }) => {
             localStorage.removeItem('guestCartId');
             return;
           } catch (e) {
-            console.warn('[Migrate] ATTACH falló, hago fallback a upsertActive', e.response?.data || e.message);
+            console.warn('[Migrate] ATTACH falló, fallback a upsertActive', e.response?.data || e.message);
           }
         }
-        // Fallback: upsertActive con los items actuales
+
         const items = cartItems.map(i => ({
           productId: i.id, name: i.nombre, image: i.imagen, quantity: i.cantidad, unitPrice: i.precio, currency: 'COP'
         }));
@@ -172,8 +138,9 @@ export const CartProvider = ({ children }) => {
         console.error('Error migrando/adoptando carrito tras login:', err.response?.data || err.message);
       }
     };
+
     migrate();
-  }, [usuario?.uid]);
+  }, [usuario?.uid, hydrated, cartItems]);
 
   // Acciones backend-first
   const addToCart = async (item, type) => {
@@ -187,7 +154,7 @@ export const CartProvider = ({ children }) => {
     } catch (err) {
       console.error('Error addToCart:', err.response?.data || err.message);
       alert('No se pudo agregar al carrito. Intenta de nuevo.');
-    };
+    }
   };
 
   const updateQuantity = async (itemId, newQuantity) => {
@@ -198,7 +165,7 @@ export const CartProvider = ({ children }) => {
     } catch (err) {
       console.error('Error updateQuantity:', err.response?.data || err.message);
       alert('No se pudo actualizar el carrito.');
-    };
+    }
   };
 
   const removeFromCart = async (itemId) => {
@@ -212,7 +179,7 @@ export const CartProvider = ({ children }) => {
       setActiveCartId(cartId);
     } catch (err) {
       console.error('Error clearCart:', err.response?.data || err.message);
-    };
+    }
   };
 
   const getTotalItems = () => cartItems.reduce((t, i) => t + i.cantidad, 0);
@@ -229,10 +196,9 @@ export const CartProvider = ({ children }) => {
       removeFromCart,
       clearCart,
       getTotalItems,
-      getTotalPrice,
-      activeCartId,
+      getTotalPrice
     }}>
       {children}
     </CartContext.Provider>
   );
-}
+};

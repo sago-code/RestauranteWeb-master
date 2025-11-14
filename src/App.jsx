@@ -14,6 +14,8 @@ import MenuSection from './pages/MenuSection';
 import { CartProvider } from './context/CartContext';
 import WhatsAppButton from './components/WhatsAppButton';
 import ChatBot from './components/ChatBot.jsx';
+import Pedidos from './pages/Pedidos';
+import Perfil from './pages/Perfil'; // <-- Agregar este import
 
 // Layout principal que incluye la barra de navegación, el pie de página y el botón de WhatsApp
 const MainLayout = ({ children }) => {
@@ -78,6 +80,18 @@ function App() {
           <AuthLayout>
             <Register />
           </AuthLayout>
+        } 
+        />
+        <Route path="/pedidos" element={
+          <MainLayout>
+            <Pedidos />
+          </MainLayout>
+        } />
+        {/* NUEVO: Perfil */}
+        <Route path="/perfil" element={
+          <MainLayout>
+            <Perfil />
+          </MainLayout>
         } />
       </Routes>
     </CartProvider>

@@ -6,6 +6,7 @@ import '@fortawesome/fontawesome-free/css/all.min.css';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '../environments/environment';
 import Breadcrumbs from './Breadcrumbs';
+import { useAuth } from '../context/AuthContext.jsx';
 
 function Login() {
   const [correo, setCorreo] = useState('');
@@ -14,6 +15,7 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isFormDirty, setIsFormDirty] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   useEffect(() => {
     // Verificar si el formulario ha sido modificado
@@ -66,8 +68,10 @@ function Login() {
       if (data?.user) {
         localStorage.setItem('token', data.user.idToken);
         sessionStorage.setItem('token', data.user.idToken);
-        localStorage.setItem('usuario', JSON.stringify({ uid: data.user.uid, email: data.user.email }));
-        sessionStorage.setItem('usuario', JSON.stringify({ uid: data.user.uid, email: data.user.email }));
+        const sessionUser = { uid: data.user.uid, email: data.user.email, photo: data.user.photo || null };
+        localStorage.setItem('usuario', JSON.stringify(sessionUser));
+        sessionStorage.setItem('usuario', JSON.stringify(sessionUser));
+        login?.(sessionUser);
         console.log('[Login email] OK status:', status, 'uid:', data.user.uid);
         navigate('/');
       } else {
@@ -84,6 +88,7 @@ function Login() {
     setShowPassword(!showPassword);
   };
 
+  // Eliminado: useEffect con getRedirectResult (flujo de redirect)
   const handleGoogleLogin = async () => {
     setError('');
     try {
@@ -95,23 +100,34 @@ function Login() {
       const url = `${base}/auth/login-google`;
       const { data, status } = await axios.post(url, { idToken });
 
+      const sessionUser = data?.session;
+      if (!sessionUser) throw new Error('Respuesta inválida del servidor');
+
+      console.log('[Login Google - popup] OK status:', status, 'uid:', sessionUser?.uid);
+
       if (data.exists) {
-        sessionStorage.setItem('token', data.token);
+        // Usuario ya existe -> activar sesión
         localStorage.setItem('token', data.token);
-        sessionStorage.setItem('usuario', JSON.stringify(data.session));
-        localStorage.setItem('usuario', JSON.stringify(data.session));
-        console.log('[Login Google] OK status:', status, 'uid:', data.session?.uid);
+        sessionStorage.setItem('token', data.token);
+        localStorage.setItem('usuario', JSON.stringify(sessionUser));
+        sessionStorage.setItem('usuario', JSON.stringify(sessionUser));
+        login?.(sessionUser);
         navigate('/');
       } else {
-        sessionStorage.setItem('token', data.token);
-        localStorage.setItem('token', data.token);
-        sessionStorage.setItem('usuario', JSON.stringify(data.session));
-        localStorage.setItem('usuario', JSON.stringify(data.session));
-        console.log('[Login Google] usuario nuevo, redirigiendo a registro. status:', status);
-        navigate('/register', { state: { userData: data.session, idToken: data.token } });
+        // Usuario NO existe -> NO activar sesión aún; ir a registro
+        // Limpia cualquier sesión previa por seguridad
+        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
+        localStorage.removeItem('usuario');
+        sessionStorage.removeItem('usuario');
+        navigate('/register', { state: { userData: sessionUser, idToken } });
       }
     } catch (err) {
-      console.error('[Login Google] error: status=', err.response?.status, 'data=', err.response?.data, 'msg=', err.message);
+      if (err?.code === 'auth/popup-closed-by-user') {
+        console.warn('[Login Google] popup cerrado por el usuario');
+        return;
+      }
+      console.error('[Login Google] error:', err);
       setError('No se pudo iniciar sesión con Google');
     }
   };

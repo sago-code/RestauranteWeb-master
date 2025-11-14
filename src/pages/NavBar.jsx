@@ -6,6 +6,8 @@ import './Estilos.css';
 import { useCart } from '../context/CartContext';
 import CartModal from '../components/CartModal';
 import logo from '../assets/logo.jpg';
+import { useAuth } from '../context/AuthContext.jsx';
+import axios from 'axios';
 
 function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -15,13 +17,48 @@ function Navbar() {
   const cartButtonRef = useRef(null);
   const userMenuRef = useRef(null);
   const { cartItems, updateQuantity, removeFromCart, getTotalItems } = useCart();
+  const { usuario, logout } = useAuth();
   const navigate = useNavigate();
 
   const isFormPage = window.location.pathname === '/login' || window.location.pathname === '/register';
 
-  // 🔹 Leer usuario directamente de localStorage o sessionStorage
-  const storedUser = JSON.parse(localStorage.getItem('usuario') || sessionStorage.getItem('usuario') || 'null');
-  const photoURL = storedUser ? storedUser.photo : "https://static.vecteezy.com/system/resources/previews/007/407/996/non_2x/user-icon-person-icon-client-symbol-login-head-sign-icon-design-vector.jpg";
+  // Usar el usuario del contexto; fallback al storage si el contexto aún no está cargado
+  const user = usuario || JSON.parse(localStorage.getItem('usuario') || sessionStorage.getItem('usuario') || 'null');
+  const FALLBACK_AVATAR = "https://static.vecteezy.com/system/resources/previews/007/407/996/non_2x/user-icon-person-icon-client-symbol-login-head-sign-icon-design-vector.jpg";
+  const [photoURL, setPhotoURL] = useState(FALLBACK_AVATAR);
+
+  useEffect(() => {
+    // También obtener la foto desde getUser para asegurar que sea la correcta
+    const u = usuario || JSON.parse(localStorage.getItem('usuario') || sessionStorage.getItem('usuario') || 'null');
+    const uid = u?.uid;
+    if (!uid) {
+      setPhotoURL(FALLBACK_AVATAR);
+      return;
+    }
+
+    const fetchUserPhoto = async () => {
+      try {
+        const base = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+        const headers = token ? { headers: { Authorization: `Bearer ${token}` } } : undefined;
+        const { data } = await axios.get(`${base}/users/${uid}`, headers);
+        const backendPhoto = data?.user?.photo || null;
+
+        // Priorizar foto de Google si existe
+        const googlePhoto = window?.firebaseAuth?.currentUser?.photoURL || null;
+        const isGooglePhoto = !!googlePhoto && /googleusercontent|gstatic|lh3\.googleusercontent\.com/i.test(googlePhoto);
+
+        setPhotoURL(isGooglePhoto ? googlePhoto : (backendPhoto || u?.photo || FALLBACK_AVATAR));
+      } catch (err) {
+        // Si falla la API, usar lo que exista en contexto/storage
+        const googlePhoto = window?.firebaseAuth?.currentUser?.photoURL || null;
+        const isGooglePhoto = !!googlePhoto && /googleusercontent|gstatic|lh3\.googleusercontent\.com/i.test(googlePhoto);
+        setPhotoURL(isGooglePhoto ? googlePhoto : (u?.photo || FALLBACK_AVATAR));
+      }
+    };
+
+    fetchUserPhoto();
+  }, [usuario?.uid]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -34,6 +71,8 @@ function Navbar() {
   }, []);
 
   const handleLogout = () => {
+    // Refrescar contexto y storage juntos
+    logout();
     localStorage.removeItem('usuario');
     localStorage.removeItem('token');
     sessionStorage.removeItem('usuario');
@@ -75,8 +114,12 @@ function Navbar() {
           </div>
 
           {/* Usuario o login */}
-          {storedUser ? (
-            <div className="nav-dropdown" ref={userMenuRef}>
+          {user ? (
+            <div
+              className="nav-dropdown"
+              ref={userMenuRef}
+              style={{ position: 'relative' }}
+            >
               <button className="nav-link user-menu-button" onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}>
                 <img
                   src={photoURL}
@@ -85,10 +128,10 @@ function Navbar() {
                   width="30"
                   height="30"
                   style={{ objectFit: "cover", border: "2px solid #fff" }}
+                  onError={(e) => { e.currentTarget.src = FALLBACK_AVATAR; }}
                 />
-                <span>{storedUser.displayName}</span>
+                {/* Solo imagen */}
               </button>
-
               <div className={`dropdown-content user-dropdown ${isUserMenuOpen ? 'show' : ''}`}>
                 <div className="user-info">
                   <img
@@ -98,10 +141,10 @@ function Navbar() {
                     width="40"
                     height="40"
                     style={{ objectFit: "cover", border: "2px solid #ccc" }}
+                    onError={(e) => { e.currentTarget.src = FALLBACK_AVATAR; }}
                   />
-                  <div>
-                    <span>{storedUser.displayName}</span><br />
-                    <small>{storedUser.email}</small>
+                  <div className="user-text">
+                    <small className="user-email">{user.email}</small>
                   </div>
                 </div>
                 <div className="dropdown-divider"></div>

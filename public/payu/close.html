@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Cerrando pago…</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>html,body{background:#111;color:#ddd;font-family:sans-serif}</style>
+  </head>
+  <body>
+    <script>
+      try {
+        const params = new URLSearchParams(window.location.search || '');
+        const payload = {};
+        params.forEach((v, k) => { payload[k] = v; });
+        if (window.opener) {
+          window.opener.postMessage({ type: 'PAYU_DONE', payload }, '*');
+        }
+      } catch (e) {}
+      setTimeout(() => { window.close(); }, 100);
+    </script>
+  </body>
+</html>

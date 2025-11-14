@@ -2,9 +2,12 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import { useCart } from '../context/CartContext';
 import Breadcrumbs from './Breadcrumbs';
+import { useState } from 'react';
+import ProductDetail from '../components/ProductDetail.jsx';
 
 function Perros() {
   const { addToCart } = useCart();
+  const [selected, setSelected] = useState(null);
 
   const handleAddToCart = async (perro) => {
     try {
@@ -63,7 +66,6 @@ function Perros() {
   return (
     <div className="container mt-4 text-white">
       <Breadcrumbs items={[
-
         { label: 'Inicio', to: '/' },
         { label: 'Perros Calientes' }
       ]} />
@@ -71,7 +73,14 @@ function Perros() {
       <div className="row">
         {perros.map((perro) => (
           <div className="col-md-4 mb-4" key={perro.id}>
-            <div className="card bg-dark text-white h-100">
+            <div
+              className="card bg-dark text-white h-100"
+              onClick={() => setSelected(perro)}
+              role="button"
+              tabIndex="0"
+              onKeyDown={(e) => e.key === 'Enter' && setSelected(perro)}
+              style={{ cursor: 'pointer' }}
+            >
               <img 
                 src={perro.imagen} 
                 className="card-img-top" 
@@ -84,15 +93,22 @@ function Perros() {
                 <p className="price">${perro.precio.toLocaleString()}</p>
                 <button 
                   className="btn btn-primary"
-                  onClick={() => handleAddToCart(perro)}
+                  onClick={(e) => { e.stopPropagation(); handleAddToCart(perro); }}
                 >
                   Agregar al Carrito
                 </button>
+                {/* Se elimina el botón "Ver detalles" */}
               </div>
             </div>
           </div>
         ))}
       </div>
+      <ProductDetail
+        product={selected}
+        isOpen={!!selected}
+        onClose={() => setSelected(null)}
+        onAdd={(p) => { handleAddToCart(p); setSelected(null); }}
+      />
     </div>
   );
 }
