@@ -287,9 +287,57 @@ export default function OrderModal({
             onApprove: async (data, actions) => {
               try {
                 const details = await actions.order.capture();
-                if (onPayPaypal) {
-                  onPayPaypal(details);
+
+                // NUEVO: crear orden en backend + convertir carrito
+                const cartUid = activeCartId || localStorage.getItem('guestCartId') || null;
+                const userId = usuario?.uid || null;
+                const paypalOrderId =
+                  details?.id ||
+                  details?.purchase_units?.[0]?.payments?.captures?.[0]?.id ||
+                  data?.orderID || null;
+
+                const payload = {
+                  cartUid,
+                  userId,
+                  typePageMetod: 'paypal',
+                  status: 'paid',
+                  paypalOrderId,
+                  subtotalCOP: subtotal,
+                  shippingCost: SHIPPING_COST,
+                  totalCOP: total,
+                  totalUSD: Number(usdTotal),
+                  currency: 'COP',
+                  payment: details,
+                  referenceCode: null,
+                };
+
+                try {
+                  await axios.post(`${API_BASE}/orders`, payload);
+                } catch (err) {
+                  console.error('Error creando orden PayPal:', err.response?.data || err.message);
                 }
+
+                try {
+                  const stored = JSON.parse(localStorage.getItem('usuario') || sessionStorage.getItem('usuario') || 'null');
+                  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+                  const uid = stored?.uid || usuario?.uid || null;
+                  if (uid) {
+                    await axios.post(
+                      `${API_BASE}/carts/active/${uid}/pay`,
+                      {},
+                      token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+                    );
+                  } else if (cartUid) {
+                    await axios.post(`${API_BASE}/carts/${cartUid}/pay`);
+                  }
+                  await clearCart();
+                } catch (err) {
+                  console.error('Error al convertir carrito tras PayPal:', err.response?.data || err.message);
+                }
+
+                // Compatibilidad: mantener callback si alguien lo usa
+                try { onPayPaypal && onPayPaypal(details); } catch {}
+
                 // Cerrar modal después del pago exitoso
                 onClose();
               } catch (error) {
